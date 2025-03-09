@@ -1,5 +1,6 @@
-
 import os
+import time
+import threading
 import joblib
 import geopandas as gpd
 import pandas as pd
@@ -43,52 +44,12 @@ DEEPSEEK_ENDPOINT = "https://api.deepseek.com/v1/chat/completions"
 # Dictionnaire pour stocker les prédictions temporaires
 predictions_cache = {}
 
-def get_regional_analysis(predictions, species):
-    """Analyse régionale détaillée avec DeepSeek API"""
-    cities_data = {
-        "Agadir": {"lat": 30.427755, "lon": -9.598107, "facteurs": ["upwelling", "nutriments"]},
-        "Tanger": {"lat": 35.7595, "lon": -5.8340, "facteurs": ["courants", "température"]},
-        "Dakhla": {"lat": 23.6841, "lon": -15.9575, "facteurs": ["salinité", "profondeur"]}
-    }
-
-    prompt = f"""
-    Analysez cette distribution de présence de {species} selon ces données clés:
-    - Concentration moyenne: {np.mean(predictions):.2f}
-    - Maximum: {np.max(predictions):.2f} | Minimum: {np.min(predictions):.2f}
-    
-    Localisations stratégiques:
-    {json.dumps(cities_data, indent=4)}
-
-    Fournissez une analyse en français avec:
-    1. Classement des zones par densité (Agadir vs Tanger vs Dakhla)
-    2. Facteurs environnementaux dominants pour chaque zone
-    3. Recommandations de gestion halieutique
-    4. Périodes de concentration maximale
-
-    Basez-vous sur ces patterns cartographiques:
-    - Zones rouges: forte concentration
-    - Zones jaunes: présence modérée
-    - Zones non colorées: faible présence
-    """
-
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": "deepseek-chat",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.5,
-        "max_tokens": 500
-    }
-
-    try:
-        response = requests.post(DEEPSEEK_ENDPOINT, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"Erreur d'analyse: {str(e)}"
+def delete_files_after_delay(file_paths, delay=120):
+    """Supprimer les fichiers après un délai donné en secondes (par défaut 2 minutes)"""
+    time.sleep(delay)
+    for file_path in file_paths:
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 def process_and_plot(csv_path, species):
     """Traite les données et génère la carte en fonction de l'espèce sélectionnée"""
@@ -159,6 +120,9 @@ def process_and_plot(csv_path, species):
 
     # Stocker les prédictions dans le cache
     predictions_cache[species] = df[prediction_column].values
+
+    # Planifier la suppression des fichiers après 2 minutes
+    threading.Thread(target=delete_files_after_delay, args=([csv_path, output_path], 120)).start()
 
     return output_path
 
